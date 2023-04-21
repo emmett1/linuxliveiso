@@ -1,7 +1,7 @@
 #!/bin/sh -e
 
 run_chroot() {
-	./xchroot $ROOTFS $@
+	./live-chroot $ROOTFS $@
 }
 
 if [ ! "$1" ]; then
@@ -117,7 +117,9 @@ mkdir -p work/_live/boot/grub/x86_64-efi work/_live/boot/grub/fonts
 echo "set prefix=/boot/grub" > work/_live/boot/grub-early.cfg
 cp -a $ROOTFS/usr/lib/grub/x86_64-efi/*.mod work/_live/boot/grub/x86_64-efi
 cp -a $ROOTFS/usr/lib/grub/x86_64-efi/*.lst work/_live/boot/grub/x86_64-efi
-cp $ROOTFS/usr/share/grub/unicode.pf2 work/_live/boot/grub/fonts
+if [ -f $ROOTFS/usr/share/grub/unicode.pf2 ]; then
+	cp $ROOTFS/usr/share/grub/unicode.pf2 work/_live/boot/grub/fonts
+fi
 mkdir -p work/_live/efi/boot
 grub-mkimage -c work/_live/boot/grub-early.cfg -o work/_live/efi/boot/bootx64.efi -O x86_64-efi -p "" iso9660 normal search search_fs_file
 modprobe loop
@@ -149,4 +151,4 @@ xorriso -as mkisofs \
 	  -volid LIVEISO \
 	-o iso/$ISONAME.iso work/_live
 
-#rm -fr work/_live work/syslinux-6.03
+rm -fr work/_live work/syslinux-6.03
