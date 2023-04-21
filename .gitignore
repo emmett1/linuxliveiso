@@ -1,0 +1,5 @@
+iso/
+work/
+liverootfs-*
+rootfs-*/
+mkrootfs-*.sh

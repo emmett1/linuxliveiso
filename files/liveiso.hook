@@ -1,0 +1,199 @@
+#!/bin/sh
+
+_unmount() {
+	while true; do
+		mountpoint -q $1 || break
+		umount $1 2>/dev/null
+	done
+}
+
+_chroot() {
+	mount --bind /dev $newroot/dev
+	mount -t proc proc $newroot/proc
+	mount -t sysfs sysfs $newroot/sys
+	chroot $newroot $@
+	_unmount $newroot/sys
+	_unmount $newroot/proc
+	_unmount $newroot/dev
+}
+
+build_hook() {
+	_base_hook
+	_udev_hook
+	_kmod_hook
+	_liveiso_hook	
+}
+
+_base_hook() {
+	for dir in bin dev lib/firmware run sys proc usr \
+		etc/modprobe.d etc/udev/rules.d; do
+		add_dir /$dir
+	done
+	
+	add_symlink /sbin bin
+	add_symlink /usr/bin ../bin
+	add_symlink /usr/sbin ../bin
+	add_symlink /lib64 lib
+	add_symlink /usr/lib ../lib
+	add_symlink /usr/lib64 ../lib
+	
+	for bin in bash sh cat mv cp killall ls mkdir mount find xargs grep fgrep \
+		umount sed sleep ln rm uname chroot chmod \
+		readlink basename modprobe blkid switch_root \
+		kmod lsmod insmod setsid awk mountpoint; do
+		add_binary $bin
+	done
+
+	add_file /usr/share/terminfo/l/linux
+	add_file /lib/ld-linux-x86-64.so.2
+}
+
+_udev_hook() {
+	add_file /etc/udev/udev.conf
+	add_file /lib/udev/rules.d/50-udev-default.rules
+	add_file /lib/udev/rules.d/60-persistent-storage.rules
+	add_file /lib/udev/rules.d/64-btrfs.rules
+	add_file /lib/udev/rules.d/80-drivers.rules
+
+	if [ -f /usr/lib/systemd/systemd-udevd ]; then
+		add_binary /usr/lib/systemd/systemd-udevd
+	else
+		add_binary udevd
+	fi
+	add_binary udevadm
+	add_binary /lib/udev/ata_id
+	add_binary /lib/udev/scsi_id
+}
+
+_kmod_hook() {
+	REQMODULES="kernel/crypto
+                kernel/fs
+                kernel/lib
+                kernel/drivers/block
+                kernel/drivers/ata
+                kernel/drivers/md
+                kernel/drivers/firewire
+                kernel/drivers/input
+                kernel/drivers/scsi
+                kernel/drivers/message
+                kernel/drivers/pcmcia
+                kernel/drivers/virtio
+                kernel/drivers/hid
+                kernel/drivers/usb/host
+                kernel/drivers/usb/storage"
+
+	for mod in $REQMODULES; do
+		FTGT="$FTGT /lib/modules/$KERNEL/$mod"
+	done
+	for modules in $(find $FTGT -type f -name "*.ko*" 2> /dev/null); do
+		modules=$(echo ${modules%*.ko*})
+		add_module ${modules##*/}
+	done
+}
+
+_liveiso_hook() {
+	add_module cdrom
+	add_module loop
+	add_module overlay
+
+	add_file /lib/udev/rules.d/60-cdrom_id.rules
+			 
+	add_binary /lib/udev/cdrom_id
+	add_binary blockdev
+	add_binary losetup
+}
+
+run_earlyhook() {
+	_udev_earlyhook
+	_liveiso_earlyhook
+}
+
+_udev_earlyhook() {
+	if [ -x /usr/lib/systemd/systemd-udevd ]; then
+		/usr/lib/systemd/systemd-udevd --daemon --resolve-names=never
+	else
+		udevd --daemon --resolve-names=never
+	fi
+	udevadm trigger --action=add    --type=subsystems
+	udevadm trigger --action=add    --type=devices
+	udevadm trigger --action=change --type=devices
+	udevadm settle
+}
+
+_liveiso_earlyhook() {
+	for mod in cdrom loop overlay; do
+		modprobe $mod 2>/dev/null
+	done
+	
+	if [ -z "$root" ]; then
+		mount_handler=_mount_livecd
+	fi
+}
+
+_mount_livecd() {
+	newroot=$1
+		
+	MEDIA=/dev/disk/by-label/LIVEISO
+	MEDIUM=/run/initramfs/medium
+	SYSTEM=/run/initramfs/system
+	WRITEDIR=/run/initramfs/overlayfs/write
+	WORKDIR=/run/initramfs/overlayfs/work
+	sfsimg=/run/initramfs/medium/boot/rootfs.sfs
+	delay=${delay:-5}
+	
+	mkdir -p $MEDIUM $SYSTEM $WRITEDIR $WORKDIR
+	
+	if [ ! -e $MEDIA ]; then
+		msg "wait $delay seconds..."
+		sleep $delay
+		if [ ! -e $MEDIA ]; then
+			msg "media is not appeared even after wait $delay seconds..."
+			msg "try increase delay by append 'delay=<seconds>' to boot cmdline"
+			sleep 9999
+		fi
+	fi
+	
+	msg "mounting media to $MEDIUM..."
+	mount -o ro $MEDIA $MEDIUM || problem
+	
+	if [ "$ram" = y ]; then
+		msg "mounting /run/initramfs/ram to ram..."
+		mkdir -p /run/initramfs/ram
+		mount -t tmpfs -o "size=75%",mode=0755 ram /run/initramfs/ram || problem
+		msg "copying stuffs to /run/initramfs/ram..."
+		cp -r $MEDIUM/rootfs /run/initramfs/ram/ || problem
+		cp $sfsimg /run/initramfs/ram/ || problem
+		sfsimg=/run/initramfs/ram/rootfs.sfs
+	fi
+	sfs_dev=$(losetup --find --show --read-only $sfsimg)
+	msg "mounting squashfs img to $SYSTEM..."
+	mount -o defaults -r $sfs_dev $SYSTEM || problem
+
+	# overlayfs mount	
+	msg "mounting overlays to $newroot..."
+	mount -t overlay overlay -o upperdir=$WRITEDIR,lowerdir=$SYSTEM,workdir=$WORKDIR $newroot || problem
+
+	if [ -d $MEDIUM/rootfs/ ]; then
+		msg "copying customization files to $newroot..."
+		cp -Ra $MEDIUM/rootfs/* $newroot || problem
+	fi
+
+	# Tell system to skip fsck during startup
+	> $newroot/fastboot
+	
+	# Execute custom script before switch root
+	if [ -f $newroot/root/live_script.sh ]; then
+		msg "execute live_script.sh script..."
+		chmod +x $newroot/root/live_script.sh
+		_chroot /root/live_script.sh 2>/dev/null
+	fi
+	
+	if [ "$ram" = y ]; then
+		umount $MEDIUM
+	fi
+}
+
+run_cleanuphook() {
+	udevadm control --exit
+	udevadm info --cleanup-db
+}
