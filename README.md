@@ -59,3 +59,10 @@ livelinuxiso/
  \- run_qemu - script to test iso using qemu
  ```
       
+## Tested on
+
+- Arch Linux
+- Void Linux
+- Venom Linux
+- CRUX
+- (you tell me, i will add it)
