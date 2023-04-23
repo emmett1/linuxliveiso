@@ -4,7 +4,7 @@ Yeah as the title says, if your are a linux desktop ricer, why not make it an in
 
 ## How to do it?
 
-Basically you just need your rootfs somewhere then run `./mkiso.sh <path to your rootfs>`, then the iso iso is ready in `iso/` directory. But if you want include some customization and installable, theres a few extra step.
+Basically you just need your rootfs somewhere then run `./mkiso.sh <path to your rootfs>`, then the iso is ready in `iso/` directory. But if you want include some customization and installable, theres a few extra step.
 
 1. Prepare your rootfs of distro of your choice, i recommend write a script to do it, so you can just run it anytime when you want to make an iso. I've provide scripts for some distros `mkrootfs-<distro>.sh`, just modify it to suit your need. And i recommend your rootfs directory named `rootfs-<distro name>`, because `mkiso.sh` script use that 'distro name' for customization dir & output iso. I suggest make it clean, less modified as possible, any modification put it in `liverootfs-<distro name>`, `live_script.sh` or `post-install.sh` instead.
 2. Prepare your customization files inside `liverootfs-<distro name>` dir. You can copy over from `liverootfs` (global customization files) directory then modify it to suit your need. For config files like '.Xdefaults', '.bash_profile', '.bashrc' and etc. that should be in user's HOME, place it in `liverootfs-<distro name>/etc/skel/` directory, this skel files will automatically copied over when user is created.
@@ -66,3 +66,7 @@ livelinuxiso/
 - Venom Linux
 - CRUX
 - (you tell me, i will add it)
+
+btw you can test my created iso of some distros [here](https://sourceforge.net/projects/linuxliveiso/).
+
+if you created your distro using this script, you can share it here, so everyone can use it :)
