@@ -2,4 +2,3 @@ iso/
 work/
 liverootfs-*/etc/
 rootfs-*/
-mkrootfs-*.sh

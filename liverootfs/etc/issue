@@ -1,0 +1,11 @@
+Hey, this distro's live iso is created using 'linuxliveiso' scripts.
+
+github: https://github.com/emmett1/linuxliveiso
+issue : https://github.com/emmett1/linuxliveiso/issues
+
+Heres the default login:
+
+login:    live     login:    root
+password: live     password: root
+
+Run 'live-installer' as root or using sudo to install this distro to disk.
