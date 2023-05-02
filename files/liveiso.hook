@@ -46,6 +46,7 @@ _base_hook() {
 
 	add_file /usr/share/terminfo/l/linux
 	add_file /lib/ld-linux-x86-64.so.2
+	add_file /lib64/ld-linux-x86-64.so.2
 }
 
 _udev_hook() {
@@ -57,6 +58,8 @@ _udev_hook() {
 
 	if [ -f /usr/lib/systemd/systemd-udevd ]; then
 		add_binary /usr/lib/systemd/systemd-udevd
+	elif [ -f /lib/systemd/systemd-udevd ]; then
+		add_binary /lib/systemd/systemd-udevd
 	else
 		add_binary udevd
 	fi
@@ -111,9 +114,12 @@ run_earlyhook() {
 _udev_earlyhook() {
 	if [ -x /usr/lib/systemd/systemd-udevd ]; then
 		/usr/lib/systemd/systemd-udevd --daemon --resolve-names=never
+	elif [ -x /lib/systemd/systemd-udevd ]; then
+		/lib/systemd/systemd-udevd --daemon --resolve-names=never
 	else
 		udevd --daemon --resolve-names=never
 	fi
+	#/lib/systemd/systemd-udevd --daemon --resolve-names=never
 	udevadm trigger --action=add    --type=subsystems
 	udevadm trigger --action=add    --type=devices
 	udevadm trigger --action=change --type=devices
@@ -149,7 +155,7 @@ _mount_livecd() {
 		if [ ! -e $MEDIA ]; then
 			msg "media is not appeared even after wait $delay seconds..."
 			msg "try increase delay by append 'delay=<seconds>' to boot cmdline"
-			sleep 9999
+			problem
 		fi
 	fi
 	
