@@ -4,11 +4,35 @@ run_chroot() {
 	./live-chroot $ROOTFS $@
 }
 
+if [ ! $(command -v mksquashfs) ]; then
+	echo "mksquashfs not found"
+	exit 1
+fi
+
+if [ ! $(command -v xorriso) ]; then
+	echo "xorriso not found"
+	exit 1
+fi
+
 if [ ! "$1" ]; then
 	echo "usage:
 	$0 <rootfs dir>"
 	exit 1
 fi
+
+# your exclude dirs here eg: var/cache/somedir/*
+#YOUR_EXCLUDE_DIRS=""
+
+# slackware
+EXCLUDE_DIRS="$EXCLUDE_DIRS var/lib/sbopkg/* var/cache/sbopkg/* var/lib/slackpkg/*"
+
+# gentoo
+EXCLUDE_DIRS="$EXCLUDE_DIRS var/cache/distfiles/*"
+
+# summerize exclude dirs
+for i in $EXCLUDE_DIRS $YOUR_EXCLUDE_DIRS; do
+	squashfsexclude="$squashfsexclude -e $ROOTFS/$i"
+done
 
 ROOTFS=$(realpath $1)
 distroname=${ROOTFS##*/}
@@ -40,6 +64,11 @@ fi
 
 if [ ! -d "$ROOTFS/usr/lib/modules/$KERNELVER" ] && [ ! -d "$ROOTFS/lib/modules/$KERNELVER" ]; then
 	echo "kernel directory does not exist"
+	exit 1
+fi
+
+if [ ! "$ROOTFS/usr/lib/grub/x86_64-efi/" ] || [ ! "$ROOTFS/usr/lib64/grub/x86_64-efi/" ]; then
+	echo "grub-efi files not found on target system"
 	exit 1
 fi
 
@@ -94,12 +123,14 @@ else
 		-b 1048576 \
 		-comp xz \
 		-e $ROOTFS/root/* \
+		-e $ROOTFS/home/* \
 		-e $ROOTFS/tools* \
 		-e $ROOTFS/tmp/* \
 		-e $ROOTFS/dev/* \
 		-e $ROOTFS/proc/* \
 		-e $ROOTFS/sys/* \
-		-e $ROOTFS/run/* 2>/dev/null
+		-e $ROOTFS/run/* \
+		$squashfsexclude 2>/dev/null
 fi
 
 install -m755 work/mkinitramfs $ROOTFS/tmp/mkinitramfs
@@ -115,8 +146,8 @@ mv $ROOTFS/tmp/initrd work/_live/boot/initrd
 # Setup UEFI mode...
 mkdir -p work/_live/boot/grub/x86_64-efi work/_live/boot/grub/fonts
 echo "set prefix=/boot/grub" > work/_live/boot/grub-early.cfg
-cp -a $ROOTFS/usr/lib/grub/x86_64-efi/*.mod work/_live/boot/grub/x86_64-efi
-cp -a $ROOTFS/usr/lib/grub/x86_64-efi/*.lst work/_live/boot/grub/x86_64-efi
+cp -a $ROOTFS/usr/lib*/grub/x86_64-efi/*.mod work/_live/boot/grub/x86_64-efi
+cp -a $ROOTFS/usr/lib*/grub/x86_64-efi/*.lst work/_live/boot/grub/x86_64-efi
 if [ -f $ROOTFS/usr/share/grub/unicode.pf2 ]; then
 	cp $ROOTFS/usr/share/grub/unicode.pf2 work/_live/boot/grub/fonts
 fi
