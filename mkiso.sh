@@ -29,11 +29,6 @@ EXCLUDE_DIRS="$EXCLUDE_DIRS var/lib/sbopkg/* var/cache/sbopkg/* var/lib/slackpkg
 # gentoo
 EXCLUDE_DIRS="$EXCLUDE_DIRS var/cache/distfiles/*"
 
-# summerize exclude dirs
-for i in $EXCLUDE_DIRS $YOUR_EXCLUDE_DIRS; do
-	squashfsexclude="$squashfsexclude -e $ROOTFS/$i"
-done
-
 ROOTFS=$(realpath $1)
 distroname=${ROOTFS##*/}
 distroname=${distroname#*-}
@@ -43,6 +38,11 @@ if [ ! -d $ROOTFS ]; then
 	echo "rootfs directory not exist"
 	exit 1
 fi
+
+# summerize exclude dirs
+for i in $EXCLUDE_DIRS $YOUR_EXCLUDE_DIRS; do
+	squashfsexclude="$squashfsexclude -e $ROOTFS/$i"
+done
 
 if [ -f $ROOTFS/usr/lib/os-release ]; then
 	. $ROOTFS/usr/lib/os-release
