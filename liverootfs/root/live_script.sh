@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# get distro's info
+if [ -f /etc/os-release ]; then
+	. /etc/os-release
+fi
+
 LIVEUSER=live
 PASSWORD=live
 
@@ -11,10 +16,24 @@ echo "root:root" | chpasswd -c SHA512
 echo "$LIVEUSER:$PASSWORD" | chpasswd -c SHA512
 
 # hostname for live
-echo liveiso > /etc/hostname
+case $NAME in
+	Slackware) echo liveiso > /etc/HOSTNAME;;
+	        *) echo liveiso > /etc/hostname;;
+esac
 
 # timezone
-ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+case $NAME in
+	Gentoo) echo "$TIMEZONE" > $ROOT/etc/timezone
+	        emerge --config sys-libs/timezone-data;;
+	     *) ln -sf /usr/share/zoneinfo/UTC /etc/localtime;;
+esac
+
+# a little path to avoid these pseudofs mount again, its already handled by initramfs
+if [ "$NAME" = Slackware ]; then	
+	sed -i 's,/sbin/mount -v proc /proc.*,true,' /etc/rc.d/rc.S
+	sed -i 's,/sbin/mount -v sysfs /sys.*,true,' /etc/rc.d/rc.S
+	sed -i 's,/sbin/mount -v -n -t tmpfs tmpfs.*,true,' /etc/rc.d/rc.S
+fi
 
 # enable sudo permission for all user in live
 if [ -f /etc/sudoers ]; then

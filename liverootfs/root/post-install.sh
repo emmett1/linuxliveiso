@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# this script execute to apply changes to installed system from data from venom-installer
+# this script execute to apply changes to installed system from data from live-installer
 #
 # list variable:
 #  $ROOT       - directory where system is installed
@@ -14,6 +14,15 @@
 #  $BOOTLOADER - disk to install grub (either '/dev/sdX or skip)
 #  $EFI_SYSTEM - 1 if boot in UEFI mode
 #
+
+_run() {
+	live-chroot $ROOT $@
+}
+
+# get distro's info
+if [ -f /etc/os-release ]; then
+	. /etc/os-release
+fi
 
 if [ -x $ROOT/etc/rc.d/networkmanager ]; then
 	network=networkmanager
@@ -48,51 +57,81 @@ for d in $daemons; do
 done
 
 # hostname
-echo "$HOSTNAME" > $ROOT/etc/hostname
+case $NAME in
+	Slackware) echo "$HOSTNAME" > $ROOT/etc/HOSTNAME;;
+	        *) echo "$HOSTNAME" > $ROOT/etc/hostname;;
+esac
 
 # hardware clock
-#sed "s;#HARDWARECLOCK=.*;HARDWARECLOCK=\"$clock_var\";" -i $ROOT/etc/rc.conf
-# temporarily set default to localtime
-sed "s;#HARDWARECLOCK=.*;HARDWARECLOCK=\"localtime\";" -i $ROOT/etc/rc.conf
-sed "s;#HARDWARECLOCK=.*;HARDWARECLOCK=\"localtime\";" -i $ROOT/etc/runit/runit.conf
+case $NAME in
+	Venom*) sed "s;#HARDWARECLOCK=.*;HARDWARECLOCK=\"localtime\";" -i $ROOT/etc/rc.conf
+	        sed "s;#HARDWARECLOCK=.*;HARDWARECLOCK=\"localtime\";" -i $ROOT/etc/runit/runit.conf;;
+esac
 
 # timezone
-sed "s;#TIMEZONE=.*;TIMEZONE=\"$TIMEZONE\";" -i $ROOT/etc/rc.conf
-sed "s;#TIMEZONE=.*;TIMEZONE=\"$TIMEZONE\";" -i $ROOT/etc/runit/runit.conf
+case $NAME in
+	Slackware) ln -sf /usr/share/zoneinfo/$TIMEZONE $ROOT/etc/localtime;;
+	   Gentoo) echo "$TIMEZONE" > $ROOT/etc/timezone
+	           emerge --config sys-libs/timezone-data;;
+	   Venom*) sed "s;#TIMEZONE=.*;TIMEZONE=\"$TIMEZONE\";" -i $ROOT/etc/rc.conf
+               sed "s;#TIMEZONE=.*;TIMEZONE=\"$TIMEZONE\";" -i $ROOT/etc/runit/runit.conf;;
+esac
 
 # keymap
-sed "s;#KEYMAP=.*;KEYMAP=\"$KEYMAP\";" -i $ROOT/etc/rc.conf
-sed "s;#KEYMAP=.*;KEYMAP=\"$KEYMAP\";" -i $ROOT/etc/runit/runit.conf
+case $NAME in
+	Slackware) sed -i "s,us.map,$KEYMAP.map," $ROOT/etc/rc.d/rc.keymap;;
+	   Gentoo) echo "keymap=\"$KEYMAP\"" > $ROOT/etc/conf.d/keymaps;;
+   	   Venom*) sed "s;#KEYMAP=.*;KEYMAP=\"$KEYMAP\";" -i $ROOT/etc/rc.conf
+               sed "s;#KEYMAP=.*;KEYMAP=\"$KEYMAP\";" -i $ROOT/etc/runit/runit.conf;;
+esac
+
+# locale
+case $NAME in
+	Slackware) sed "s,LANG=en_US,LANG=$LOCALE,g" -i $ROOT/etc/profile.d/lang.sh;;
+	   Gentoo) sed "s/#$LOCALE/$LOCALE/g" -i $ROOT/etc/locale.gen
+	           echo "LANG=$LOCALE.UTF-8" > $ROOT/etc/env.d/02locale
+	           _run locale-gen;;
+	   Venom*) sed "s/#$LOCALE/$LOCALE/" -i $ROOT/etc/locales
+	           echo "LANG=$LOCALE.UTF-8" > $ROOT/etc/locale.conf
+	           _run genlocales;;
+esac
 
 # daemons
-sed "s;#DAEMONS=.*;DAEMONS=\"$dd\";" -i $ROOT/etc/rc.conf
+case $NAME in
+	Venom*) sed "s;#DAEMONS=.*;DAEMONS=\"$dd\";" -i $ROOT/etc/rc.conf;;
+esac
+
+case $NAME in
+	Slackware) echo "/dev/fd0 /mnt/floppy auto noauto,owner 0 0" >> $ROOT/etc/fstab
+	           echo "devpts /dev/pts devpts gid=5,mode=620 0 0" >> $ROOT/etc/fstab
+	           echo "proc /proc proc defaults 0 0" >> $ROOT/etc/fstab
+	           echo "tmpfs /dev/shm tmpfs nosuid,nodev,noexec 0 0" >> $ROOT/etc/fstab;;
+esac
 
 # create user
-# 'useradd -R' not copy all skel files, use xchroot instead
+# 'useradd -R' not copy all skel files, use _run instead
 #useradd -R $ROOT -m -G users,wheel,audio,video -s /bin/bash $USERNAME
-xchroot $ROOT useradd -m -G users,wheel,audio,video -s /bin/bash $USERNAME
+_run useradd -m -G users,wheel,audio,video -s /bin/bash $USERNAME
 echo "$USERNAME:$USER_PSWD" | chpasswd -R $ROOT -c SHA512
 
 # root pswd
 echo "root:$ROOT_PSWD" | chpasswd -R $ROOT -c SHA512
 
-# locale
-sed "s/#$LOCALE/$LOCALE/" -i $ROOT/etc/locales
-echo "LANG=$LOCALE.UTF-8" > $ROOT/etc/locale.conf
-xchroot $ROOT genlocales
-
 # initramfs
-xchroot $ROOT mkinitramfs
+case $NAME in
+	Venom*) _run mkinitramfs;;
+	Gentoo) _run emerge --config sys-kernel/gentoo-kernel
+esac
 
 # grub
 if [ "$BOOTLOADER" != skip ]; then
 	echo GRUB_DISABLE_OS_PROBER=false >> $ROOT/etc/default/grub
 	if [ "$EFI_SYSTEM" = 1 ]; then
 		# EFI
-		xchroot $ROOT grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=venom_grub --recheck $BOOTLOADER
+		_run grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=live_grub --recheck $BOOTLOADER
 	else
 		# mbr
-		xchroot $ROOT grub-install --target=i386-pc $BOOTLOADER
+		_run grub-install --target=i386-pc $BOOTLOADER
 	fi
-	xchroot $ROOT grub-mkconfig -o /boot/grub/grub.cfg
+	_run grub-mkconfig -o /boot/grub/grub.cfg
 fi
