@@ -113,13 +113,21 @@ run_earlyhook() {
 
 _udev_earlyhook() {
 	if [ -x /usr/lib/systemd/systemd-udevd ]; then
-		/usr/lib/systemd/systemd-udevd --daemon --resolve-names=never
+		[ "$quiet" = y ] && {
+			/usr/lib/systemd/systemd-udevd --daemon --resolve-names=never >/dev/null 2>&1
+		} || {
+			/usr/lib/systemd/systemd-udevd --daemon --resolve-names=never
+		}
+			
 	elif [ -x /lib/systemd/systemd-udevd ]; then
-		/lib/systemd/systemd-udevd --daemon --resolve-names=never
+		[ "$quiet" = y ] && {
+			/lib/systemd/systemd-udevd --daemon --resolve-names=never >/dev/null 2>&1
+		} || {
+			/lib/systemd/systemd-udevd --daemon --resolve-names=never
+		}
 	else
 		udevd --daemon --resolve-names=never
 	fi
-	#/lib/systemd/systemd-udevd --daemon --resolve-names=never
 	udevadm trigger --action=add    --type=subsystems
 	udevadm trigger --action=add    --type=devices
 	udevadm trigger --action=change --type=devices
@@ -132,11 +140,11 @@ _liveiso_earlyhook() {
 	done
 	
 	if [ -z "$root" ]; then
-		mount_handler=_mount_livecd
+		mount_handler=mount_venomiso
 	fi
 }
 
-_mount_livecd() {
+mount_venomiso() {
 	newroot=$1
 		
 	MEDIA=/dev/disk/by-label/LIVEISO
@@ -156,6 +164,8 @@ _mount_livecd() {
 			msg "media is not appeared even after wait $delay seconds..."
 			msg "try increase delay by append 'delay=<seconds>' to boot cmdline"
 			problem
+			msg "nothing further..."
+			sleep 9999
 		fi
 	fi
 	
@@ -191,7 +201,11 @@ _mount_livecd() {
 	if [ -f $newroot/root/live_script.sh ]; then
 		msg "execute live_script.sh script..."
 		chmod +x $newroot/root/live_script.sh
-		_chroot /root/live_script.sh 2>/dev/null
+		if [ "$quiet" = y ]; then
+			_chroot /root/live_script.sh >/dev/null 2>&1
+		else
+			_chroot /root/live_script.sh
+		fi
 	fi
 	
 	if [ "$ram" = y ]; then

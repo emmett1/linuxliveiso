@@ -575,15 +575,16 @@ start_install() {
 		prompt_user "choose option: "
 		read input
 		case $input in
-			1) umount -R $ROOT; exit 0;;
-			2) umount -R $ROOT; reboot; exit 0;;
-			3) umount -R $ROOT; poweroff; exit 0;;
-			4) live-chroot $ROOT;;
+			1) umount -R $ROOT;;
+			2) umount -R $ROOT; reboot;;
+			3) umount -R $ROOT; poweroff;;
+			4) live-chroot $ROOT /bin/bash; umount -R $ROOT;;
 		esac
 		[ "$input" = 0 ] && continue
 		[ "$input" -gt "3" ] && continue
 		done=$input
 	done
+	exit 0
 }
 
 print_partitioning_tips() {
@@ -640,12 +641,12 @@ fi
 
 ROOT=/mnt/install
 
-if [ -f "/run/initramfs/ram/filesystem.sfs" ]; then
-	ROOTSFS="/run/initramfs/ram/filesystem.sfs"
-	LIVEROOTFS="/run/initramfs/ram/rootfs"
-else
+if [ -f "/run/initramfs/ram/rootfs.sfs" ]; then
 	ROOTSFS="/run/initramfs/ram/rootfs.sfs"
 	LIVEROOTFS="/run/initramfs/ram/rootfs"
+else
+	ROOTSFS="/run/initramfs/medium/boot/rootfs.sfs"
+	LIVEROOTFS="/run/initramfs/medium/rootfs"
 fi
 
 if [ -e /sys/firmware/efi/systab ]; then
